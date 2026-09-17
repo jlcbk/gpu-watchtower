@@ -26,3 +26,8 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # 2026-09-17 真机崩溃根因修复：LVGL 渲染在 main 任务里跑，默认 3584B 栈溢出
 # （backtrace 实锤 app_main→rk_ui_refresh→lv_refr_now 链；courier 同款 UI 任务用 24KB）
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# P5 睡眠机制（2026-09-17）：PM + tickless（DFS 由固件 esp_pm_configure 运行时配置；
+# 轻睡门控=电池不在位时持 NO_LIGHT_SLEEP 锁保 USB 控制台，电池在位才放行真睡）
+CONFIG_PM_ENABLE=y
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y

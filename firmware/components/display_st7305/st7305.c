@@ -21,6 +21,8 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_types.h"
 #include "esp_log.h"
+#include "esp_pm.h"
+#include "sdkconfig.h"
 
 #define TAG "st7305"
 
@@ -44,6 +46,11 @@ static esp_lcd_panel_io_handle_t s_io;
 static uint8_t *s_native;            /* 15000B，DMA 可达内存 */
 static uint8_t s_prev[NATIVE_BYTES]; /* 上次已推送帧（同帧跳推 + 脏矩形计算基准） */
 static SemaphoreHandle_t s_trans_done;
+#if CONFIG_PM_ENABLE
+/* P5 睡眠机制：flush 全程持 APB_FREQ_MAX 锁——SPI 传输期间禁轻睡（否则空闲任务
+ * 可在 DMA 进行中入睡）；APB 锁顺带把时钟钉在 80MHz，SPI 时序稳定。 */
+static esp_pm_lock_handle_t s_pm_apb;
+#endif
 
 /* ---- 部分窗口刷新（2026-09-17 定稿：仅页窗口/整高竖条模式）----
  * 已证实（撕裂照片取证）：0x2B 页窗口 = 原生组（byte_x）= 逻辑 2 列宽整高
@@ -185,6 +192,16 @@ esp_err_t st7305_init(const st7305_config_t *cfg)
         s_native = heap_caps_malloc(NATIVE_BYTES, MALLOC_CAP_SPIRAM);
     }
     if (s_native == NULL) { err = ESP_ERR_NO_MEM; goto fail_io; }
+
+#if CONFIG_PM_ENABLE
+    {
+        err = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "st7305", &s_pm_apb);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "pm apb lock create failed: %s", esp_err_to_name(err));
+            s_pm_apb = NULL; /* 无锁继续（轻睡开启时 flush 有风险，由上层门控兜底） */
+        }
+    }
+#endif
 
     hw_reset(cfg->rst_gpio);
 
@@ -381,12 +398,25 @@ esp_err_t st7305_flush(const rk_frame_t *frame)
     }
 
     /* 周期自愈全刷：窗口映射若有错位，≤128 帧内被一次全帧重写修正 */
+#if CONFIG_PM_ENABLE
+    if (s_pm_apb != NULL) {
+        esp_pm_lock_acquire(s_pm_apb);
+    }
+#endif
     static uint32_t s_flush_seq;
     s_flush_seq++;
+    esp_err_t err;
     if ((s_flush_seq & 127u) == 0) {
-        return push_full_and_cache();
+        err = push_full_and_cache();
+    } else {
+        err = push_delta();
     }
-    return push_delta();
+#if CONFIG_PM_ENABLE
+    if (s_pm_apb != NULL) {
+        esp_pm_lock_release(s_pm_apb);
+    }
+#endif
+    return err;
 }
 
 void st7305_deinit(void)

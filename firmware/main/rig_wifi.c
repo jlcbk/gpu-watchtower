@@ -165,3 +165,14 @@ bool rig_wifi_connected(void)
 {
     return s_connected;
 }
+
+void rig_wifi_set_ps(bool idle_max)
+{
+    wifi_ps_type_t ps = idle_max ? WIFI_PS_MAX_MODEM : WIFI_PS_MIN_MODEM;
+    esp_err_t err = esp_wifi_set_ps(ps);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "wifi ps -> %s", idle_max ? "MAX_MODEM" : "MIN_MODEM");
+    } else {
+        ESP_LOGW(TAG, "wifi ps set failed: %s", esp_err_to_name(err));
+    }
+}

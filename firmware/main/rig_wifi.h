@@ -17,4 +17,7 @@ esp_err_t rig_wifi_start(const char *ssid, const char *pass);
 /* 是否已取到 IP（poll 侧据此决定是否计连击/退避） */
 bool rig_wifi_connected(void);
 
+/* 射频省电档切换（P5：空闲降 MAX_MODEM / 活动恢复 MIN_MODEM；幂等，防抖归调用方） */
+void rig_wifi_set_ps(bool idle_max);
+
 #endif /* RIG_WIFI_H */

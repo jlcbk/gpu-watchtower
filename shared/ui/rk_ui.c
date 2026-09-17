@@ -184,6 +184,7 @@ typedef struct {
     lv_obj_t *p2_pageind, *p2_clock;
 
     lv_obj_t *a_head, *a_temp, *a_note, *a_clock;
+    lv_obj_t *sleep_root, *sleep_l; /* 终端屏：低压深睡「休眠中」 */
 } rk_ui_t;
 
 static rk_ui_t ui;
@@ -610,6 +611,19 @@ void rk_ui_init(void)
     lv_obj_set_style_pad_all(ui.alarm_root, 0, LV_PART_MAIN);
     lv_obj_clear_flag(ui.alarm_root, LV_OBJ_FLAG_SCROLLABLE);
     alarm_create(ui.alarm_root);
+
+    /* 终端屏（默认隐藏，不影响既有帧；低压深睡时由 rk_ui_sleep_screen 接管） */
+    ui.sleep_root = lv_obj_create(scr);
+    ui_box(ui.sleep_root, 0, 0, RK_W, RK_H);
+    lv_obj_set_style_bg_color(ui.sleep_root, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(ui.sleep_root, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(ui.sleep_root, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(ui.sleep_root, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(ui.sleep_root, LV_OBJ_FLAG_SCROLLABLE);
+    ui.sleep_l = ui_text(ui.sleep_root, &f_med, 0, 132, RK_W, 36);
+    lv_obj_set_style_text_align(ui.sleep_l, LV_TEXT_ALIGN_CENTER, 0);
+    set_txt(ui.sleep_l, "休眠中");
+    set_visible(ui.sleep_root, false);
 }
 
 void rk_ui_apply(const rk_ui_model_t *m)
@@ -634,6 +648,16 @@ void rk_ui_refresh(const rk_ui_model_t *m)
     rk_ui_apply(m);
     /* 不整屏 invalidate：只有内容真变化的 widget 产生脏区；LVGL FULL 模式下
      * 无脏区则不 flush，配合 st7305 同帧跳推 = 静止画面零面板写入零闪屏 */
+    lv_refr_now(lv_display_get_default());
+}
+
+void rk_ui_sleep_screen(void)
+{
+    set_visible(ui.p1_root, false);
+    set_visible(ui.p2_root, false);
+    set_visible(ui.alarm_root, false);
+    set_visible(ui.sleep_root, true);
+    lv_obj_invalidate(lv_screen_active());
     lv_refr_now(lv_display_get_default());
 }
 

@@ -63,6 +63,9 @@ void rk_ui_apply(const rk_ui_model_t *m);
 /* apply + 整屏失效 + lv_refr_now（同步整帧刷新，语义同源项目 port）。 */
 void rk_ui_refresh(const rk_ui_model_t *m);
 
+/* 终端屏（P5 低压深睡）：清全部页面只显居中「休眠中」并同步刷新（不返回常态）。 */
+void rk_ui_sleep_screen(void);
+
 /* BOOT 短按翻页（0↔1）小工具；纯函数。 */
 rk_page_t rk_ui_page_next(rk_page_t p);
 
