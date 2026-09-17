@@ -37,6 +37,7 @@
 
 ## 变更记录
 
+- 2026-09-17 **公开发布**：GitHub [jlcbk/gpu-watchtower](https://github.com/jlcbk/gpu-watchtower)（public，main，245 文件，commit f5b6d15）。定名 gpu-watchtower；README=GPU 监控主题+满载实拍展示图；MIT；fetch_vendor.sh 拉齐不入库依赖；发布前两轮脱敏扫描+远端树核验（凭据零泄漏；server.py "00000000"=路由表标志位虚惊；AGENTS.md 去 sudo 密码提示）。
 - 2026-09-16 立项 + P0/P1/P2a 三连收（详见各报告）。
 - 2026-09-17 凌晨：用户要求真机首刷。排查 1605 人格不可烧录 → 1301 人格 default_reset 一发入魂；网络层三处缺陷主力修复；全链路（WiFi→轮询→渲染）服务器侧证实；等用户屏摄终验。
 - 2026-09-17 UI 修复轮（用户真机反馈四条）：①幻影翻页根因=boot_short_press 消抖初值不一致（开机第一循环误触发一次 GPU→SYS，屏「卡」在系统页）→ 重写为首调采样不触发；②BOOT(GPIO0)+KEY(GPIO18，Waveshare 官方表证实低有效) 双键等价翻页；③次页去 6 核小条阵改 CPU/RAM/SWAP 三大条（用户定稿）；④防闪屏双层：rk_ui_refresh 去整屏 invalidate + st7305_flush 同帧 memcmp 跳推（真·部分窗口写入无官方先例，留 P5 实验）；NET 10K 档量化防数字连跳。模拟器真实数据预检双页 VLM 全绿后刷板，轮询恢复证实。**用户复验：SYS 页不闪 ✓。**

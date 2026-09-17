@@ -10,7 +10,7 @@
  *   - 轻睡门控：电池不在位（<2500mV）禁轻睡；在位放行（console 排障取舍）
  *   - WiFi 降档：CALM 持续 5min → MAX_MODEM；BUSY/警报/按键恢复 MIN_MODEM
  *   - 低压深睡：电池在位且 <3.65V 连续 3 次（负载毛刺防抖）→ 清屏只显
- *     「休眠中」→ 停射频 → deep sleep 1h / BOOT 键唤醒复查（≥3.75V 迟滞放行）
+ *     「休眠中」→ 停射频 → 深睡 24h 纯电压复查（无按键唤醒；≥3.75V 迟滞放行）
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -72,7 +72,11 @@
 #define BATT_SLEEP_MV        3650   /* 低于此值 → 深睡（用户定稿 3.65V） */
 #define BATT_WAKE_OK_MV      3750   /* 深睡唤醒复查通过阈值（迟滞带） */
 #define BATT_SLEEP_CONFIRM   3      /* 连续 N 次低于阈值才睡（防负载毛刺） */
-#define DEEP_SLEEP_S         3600   /* 低压深睡时长：1h 后复查（充电自愈） */
+/* 低压深睡复查周期（2026-09-17 用户定稿：睡着后无任何工作态唤醒，充电才解除）。
+ * 物理约束：插充电器不会复位深睡中的芯片（电池维持 3V3 不断电），绝对零唤醒
+ * = 充电后永不复活。折中=每 24h 一次纯电压复查（~3s，无 WiFi/无上报，约
+ * 0.1mAh/天）；充上电后最迟一天内自动复活。手动逃生=长按 PWR 键断电重启。 */
+#define DEEP_SLEEP_RECHECK_S (24 * 3600)
 #define PS_MAX_AFTER_CALM_MS 300000 /* CALM 持续 5min → WiFi 降 MAX_MODEM */
 #define BATT_POLL_MS         10000  /* 电池采样节律 */
 #define EV_TIMEOUT_MS        10000  /* 主循环事件等待兜底（同电池节律） */
@@ -329,9 +333,8 @@ static void deep_sleep_now(void)
     esp_wifi_stop(); /* 停射频；面板 RAM 常供电保持「休眠中」 */
 #endif
     rk_ui_sleep_screen();
-    /* S3 深睡 GPIO 唤醒走 ext0（GPIO0=RTC pad，低电平=按住 BOOT 唤醒复查） */
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
-    esp_deep_sleep(DEEP_SLEEP_S); /* 不返回 */
+    /* 无按键唤醒（用户定稿：无任何工作态唤醒）；仅 24h 纯电压复查定时 */
+    esp_deep_sleep(DEEP_SLEEP_RECHECK_S); /* 不返回 */
 }
 
 /* 开机电池复查：电芯在位但仍低于唤醒阈值 → 休眠屏 + 回睡（不连 WiFi） */
@@ -418,8 +421,7 @@ void app_main(void)
     /* 开机低压门：仍低 → 休眠屏 + 回睡（1h 后或 BOOT 再查） */
     if (!boot_battery_gate()) {
         rk_ui_sleep_screen();
-        esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); /* BOOT 唤醒复查 */
-        esp_deep_sleep(DEEP_SLEEP_S);
+        esp_deep_sleep(DEEP_SLEEP_RECHECK_S); /* 仍低 → 回睡（24h 后再查） */
     }
 
 #if RK_HAS_NET_CONFIG
