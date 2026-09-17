@@ -19,6 +19,7 @@
 #if !defined(RK_DEVNET_OFFLINE)
 #include "rig_net_config.h" /* gitignore 凭据注入（main.c #error 守卫已保证存在） */
 #include "esp_http_client.h"
+#include "esp_wifi.h"
 #include "rig_wifi.h"
 #endif
 
@@ -53,6 +54,17 @@ static rk_poll_fsm_t g_fsm = {
 static int64_t now_ms(void)
 {
     return (int64_t)(esp_timer_get_time() / 1000LL);
+}
+
+/* ---- 板子信标（服务端日志用） ---- */
+static int32_t s_beacon_mv = -1;
+static int s_beacon_calm = 1;
+static int s_beacon_rssi = 0;
+
+void rk_poll_beacon_set(int32_t batt_mv, bool calm)
+{
+    s_beacon_mv = batt_mv;
+    s_beacon_calm = calm ? 1 : 0;
 }
 
 static void hhmm_from_ts(int64_t ts, char *out, size_t cap)
@@ -110,7 +122,14 @@ static esp_err_t poll_once(rk_stats_t *out, bool *have)
     int status = 0;
     static char body[RK_STATS_JSON_MAX_BYTES + 1];
 
-    snprintf(url, sizeof(url), "http://%s:%d/stats", RK_STATS_HOST, RK_STATS_PORT);
+    /* 信标参数随轮询上报（b=电池mV c=节拍 r=RSSI）；RSSI 顺路取一次 */
+    wifi_ap_record_t ap;
+    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+        s_beacon_rssi = ap.rssi;
+    }
+    snprintf(url, sizeof(url), "http://%s:%d/stats?b=%ld&c=%d&r=%d",
+             RK_STATS_HOST, RK_STATS_PORT, (long)s_beacon_mv, s_beacon_calm,
+             (int)s_beacon_rssi);
     esp_http_client_config_t cfg = {
         .url = url,
         .timeout_ms = 2000, /* 2s 节拍内的阻塞预算 */

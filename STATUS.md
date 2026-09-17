@@ -10,7 +10,7 @@
 | P2b | fixtures 全集 + golden 回归（任务书已按四轮迭代后的 UI 现状重写） | ✅ done 2026-09-17 | 子代理 4.4M/22min + 主力亲验：14/14 PASS、注入自检检出、上游零脏、golden 防覆盖守卫生效；**UI 定稿冻结**（golden/ + README + tools/golden_run.sh）；顺手根治 P2a PNG writer CRC bug（120KB→15KB 标准 PNG）；7 个边界 fixture 入库（未入矩阵，ad-hoc 命令在 README） |
 | P3 | 真机烧录联调 | 🔄 **首刷成功 2026-09-17**，余项见下 | 本行下方「真机事实」+ 服务器侧 ss 抓到 192.168.1.2 轮询 7779 |
 | P4 | 工况验收 + 夜班 soak | ⏳ pending | 依赖 P3 余项 |
-| P5 | 打磨 | 🔄 **哨兵节拍行为层已上线 2026-09-17**（节拍状态机 CALM 10s↔BUSY 2s + 曲线换源 /history + 板端环形删除；console 证实开机即满曲线/30s 回补/空闲停 CALM/0 重启），**余项**：睡眠机制（PM 轻睡+MAX_MODEM+按键 GPIO 中断，仅电池模式启用）、低压深睡 FSM 备援、2D 窗口标定实验、model.last_online 清理 |
+| P5 | 打磨 | 🔄 **睡眠机制+低压深睡已上线 2026-09-17（用户下单补齐，commit 9f88f67）**：①PM tickless+DFS + st7305 flush 持 APB 锁 + 主循环事件驱动重构（按键 ISR/poll 信号/10s 兜底，去 10ms 轮询）②空闲 WiFi 降 MAX_MODEM（CALM 5min，活动恢复）③**低压深睡：电池 <3.65V×3 确认 → 清屏仅显「休眠中」→ esp_wifi_stop → deep sleep 1h / BOOT(ext0) 唤醒复查 ≥3.75V 迟滞**。**新发现（改写设计假设）**：USB 供电时充电电路回灌电池槽 ~4.1V → 电压法无法区分空槽+USB 与真电池（courier「空座显 USB」在本板不成立；屏幕电池位空槽显 ~4.1V 属物理行为）→ 轻睡门控 armed 为常态，USB console 实测存活（90s 连续读零异常）；低压逻辑不受扰（回灌远高于阈值，边充边低电的边角由 1h 复查自愈）。golden 14/14 保持。**DEVICE_PENDING**：真电池低压深睡路径/轻睡实际入睡电流/休眠屏观感未实测（无电池）。**余项**：2D 窗口标定实验、model.last_online 清理、休眠中大字号（现 unifont16） |
 
 ## 真机事实（2026-09-17 首刷，主力亲手）
 

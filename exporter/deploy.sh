@@ -6,7 +6,7 @@
 set -euo pipefail
 
 DIR=/opt/rig-stats
-mkdir -p "$DIR"
+mkdir -p "$DIR/logs"
 install -m 0644 /tmp/rig-stats-server.py "$DIR/server.py"
 chown -R cui:cui "$DIR"
 

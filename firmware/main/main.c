@@ -292,6 +292,15 @@ static void power_service(void)
             g_ps_max_active = false;
         }
     }
+
+    /* 信标 + 控制台心跳（每 60 个事件 ≈10min 一行） */
+    rk_poll_beacon_set(g_batt_mv, calm);
+    static int s_hb;
+    if (++s_hb >= 60) {
+        s_hb = 0;
+        ESP_LOGI(TAG, "hb: state=%d cad=%s batt=%dmV trend=%d",
+                 (int)g_model.state, calm ? "calm" : "busy", g_batt_mv, g_trend_len);
+    }
 #endif
 }
 

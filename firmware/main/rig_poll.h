@@ -39,6 +39,10 @@ typedef struct {
  * 由 poll 任务周期调用；状态机内部维护连击/退避/警报迟滞。 */
 void rk_poll_step(rk_poll_state_t *st);
 
+/* 板子信标（随每次 /stats 轮询上报，rig-stats 服务端落 JSONL 日志）：
+ * b=电池 mV（-1=无读数）、c=节拍档（1=calm/0=busy）、r=WiFi RSSI dBm。 */
+void rk_poll_beacon_set(int32_t batt_mv, bool calm);
+
 /* 警报迟滞参数（P4 实测后调；测试便利：允许固件侧覆盖） */
 #ifndef RK_ALARM_SUSTAIN_MS
 #define RK_ALARM_SUSTAIN_MS 30000u

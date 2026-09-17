@@ -36,6 +36,27 @@ HISTORY_MAX_POINTS = 4320
 _history = deque(maxlen=HISTORY_MAX_POINTS)
 _hist_last_ts = 0
 
+# ---- 板子信标日志（板子随每次 /stats 轮询上报 b=电池mV c=节拍 r=RSSI）----
+# JSONL 逐条落盘（>4MB 轮转保留一代 .old）；轮询时间戳本身即节拍/离线的证据。
+BEACON_DIR = "/opt/rig-stats/logs"
+BEACON_PATH = os.path.join(BEACON_DIR, "board.jsonl")
+BEACON_MAX_BYTES = 4 * 1024 * 1024
+_beacon_lock = threading.Lock()
+
+def beacon_log(ip, b, c, r):
+    try:
+        with _beacon_lock:
+            try:
+                if os.path.getsize(BEACON_PATH) > BEACON_MAX_BYTES:
+                    os.replace(BEACON_PATH, BEACON_PATH + ".old")
+            except OSError:
+                pass
+            with open(BEACON_PATH, "a") as f:
+                f.write(json.dumps({"ts": int(time.time()), "ip": ip,
+                                    "b": b, "c": c, "r": r}) + "\n")
+    except Exception:
+        pass  # 信标日志失败不影响服务
+
 GPU_QUERY = ["nvidia-smi",
              "--query-gpu=name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,fan.speed",
              "--format=csv,noheader,nounits"]
@@ -186,6 +207,11 @@ class Handler(BaseHTTPRequestHandler):
             if not TOKEN or not hmac.compare_digest(self.headers.get("X-Token", ""), TOKEN):
                 self._send(403, {"error": "forbidden"})
                 return
+            qs = parse_qs(urlparse(self.path).query)
+            b = qs.get("b", [None])[0]
+            if b is not None:  # 板子信标：记录即日志（轮询节奏/电压/节拍档/信号）
+                beacon_log(self.client_address[0], b,
+                           qs.get("c", [None])[0], qs.get("r", [None])[0])
             self._send(200, _state["snap"] or {"schema": 1, "warming_up": True})
         elif path == "/history":
             if not TOKEN or not hmac.compare_digest(self.headers.get("X-Token", ""), TOKEN):
