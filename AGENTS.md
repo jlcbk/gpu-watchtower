@@ -13,5 +13,6 @@
 
 ## 远程机速查
 
-- `ssh cui@192.168.1.12`（免密已配；sudo 密码同登录密码）
+- `ssh cui@192.168.1.12`（免密已配）
 - rig-stats：`systemctl status rig-stats`；env（含 token）：`/etc/rig-stats.env`（root:cui 640）；代码 `/opt/rig-stats/server.py`
+- 板子日志：`/opt/rig-stats/logs/`（events.jsonl 状态转换史 / board.jsonl 每拍快照）
