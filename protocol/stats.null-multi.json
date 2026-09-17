@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "host": "cui-To-Be-Filled-By-O-E-M",
+  "ts": 1760000000,
+  "net_if": "enp0s31f6",
+  "uptime_s": 302400,
+  "gpu": {
+    "name": "RTX 5060 Ti",
+    "temp_c": 55,
+    "util_pct": 8,
+    "vram_used_gb": 2.1,
+    "vram_total_gb": 16.0,
+    "power_w": 21.5,
+    "power_limit_w": 170,
+    "fan_pct": null,
+    "driver": true
+  },
+  "cpu": {"temp_c": 42, "util_pct": 11, "cores_pct": [12, 9, 14, 8, 10, 13]},
+  "mem": {"used_gb": 18.2, "total_gb": 37.0, "util_pct": 49, "swap_used_gb": null, "swap_total_gb": 8.0},
+  "sys": {
+    "load1": null, "net_rx_kbps": 120, "net_tx_kbps": 45,
+    "disks": [
+      {"mnt": "/", "free_gb": 373, "total_gb": 468},
+      {"mnt": "/mnt/model-library", "free_gb": 129, "total_gb": 466}
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+# rig-lookout sdkconfig.defaults — P2a（关键项按源项目 1301 板真机验证值沿用；
+# 同款硬件 Waveshare ESP32-S3-RLCD-4.2：16MB Flash QIO、PSRAM Octal 80MHz、
+# UART0 主控制台 + USB-Serial-JTAG secondary、CPU 240MHz）
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+# 12h 走势环形缓冲（1440 点 ≈3KB，PLAN §5）放 PSRAM 静态区预留
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# 2026-09-17：主控制台切 USB-Serial-JTAG（真机排障需要应用日志可见；UART0 降为副）
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_UART=y
+CONFIG_FREERTOS_HZ=1000
+
+# 分区表：factory 12M（16MB flash 内；全量 unifont 字体 ~1.7MB + LVGL，
+# 沿用源项目定稿布局；无 OTA）
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# P2a 无 BLE（无 transport 组件）；WiFi 由 esp_wifi 组件骨架参与编译。
+# 省电/PM 打磨归 P5（本卡不启用，保持默认便于联调）。
+
+# 2026-09-17 真机崩溃根因修复：LVGL 渲染在 main 任务里跑，默认 3584B 栈溢出
+# （backtrace 实锤 app_main→rk_ui_refresh→lv_refr_now 链；courier 同款 UI 任务用 24KB）
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384

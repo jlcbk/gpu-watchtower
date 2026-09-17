@@ -1,0 +1,12 @@
+/*
+ * rig_net_config.h.template — WiFi + rig-stats 主机/令牌注入模板。
+ *
+ * 用法：cp rig_net_config.h.template rig_net_config.h 后按实际填入。
+ * rig_net_config.h 已 gitignore——绝不入库（凭证不进仓库/日志/fixtures）。
+ * 无网演示构建不需要本文件：idf.py -C firmware build -DRK_DEVNET_OFFLINE=1
+ */
+#define RK_WIFI_SSID ""             /* 2.4G SSID（ESP32 不支持 5G） */
+#define RK_WIFI_PASS ""             /* WiFi 密码 */
+#define RK_STATS_HOST "192.168.1.12"  /* Ubuntu 主机（PLAN §3） */
+#define RK_STATS_PORT 7779            /* rig-stats 导出器端口（PLAN §4） */
+#define RK_STATS_TOKEN ""             /* /etc/rig-stats.env 里的 token（600） */

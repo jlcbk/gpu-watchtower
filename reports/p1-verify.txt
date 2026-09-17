@@ -1,0 +1,60 @@
+== 2026-09-16 19:49:57 P1 verification ==
+-- health (no auth) --
+{"ok": true, "service": "rig-stats", "schema": 1, "ts": 1789559397}
+-- wrong token (expect 403) --
+403
+-- stats (auth) --
+{
+    "schema": 1,
+    "host": "cui-To-Be-Filled-By-O-E-M",
+    "ts": 1789559397,
+    "net_if": "wlx502b73c9057e",
+    "uptime_s": 183546,
+    "gpu": {
+        "name": "NVIDIA GeForce RTX 5060 Ti",
+        "temp_c": 68.0,
+        "util_pct": 100.0,
+        "vram_used_gb": 15.0,
+        "vram_total_gb": 15.9,
+        "power_w": 179.14,
+        "power_limit_w": 180.0,
+        "fan_pct": 65.0,
+        "driver": true
+    },
+    "cpu": {
+        "temp_c": 59,
+        "util_pct": 17,
+        "cores_pct": [
+            2,
+            0,
+            0,
+            0,
+            0,
+            100
+        ]
+    },
+    "mem": {
+        "used_gb": 32.1,
+        "total_gb": 37.8,
+        "util_pct": 85,
+        "swap_used_gb": 1.1,
+        "swap_total_gb": 8.0
+    },
+    "sys": {
+        "load1": 1.04,
+        "net_rx_kbps": 90,
+        "net_tx_kbps": 18,
+        "disks": [
+            {
+                "mnt": "/",
+                "free_gb": 372,
+                "total_gb": 467
+            },
+            {
+                "mnt": "/mnt/model-library",
+                "free_gb": 129,
+                "total_gb": 466
+            }
+        ]
+    }
+}

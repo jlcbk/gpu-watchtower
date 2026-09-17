@@ -1,0 +1,2 @@
+RIG_STATS_MOUNTS=/,/mnt/model-library
+RIG_STATS_CPU_SENSORS=coretemp,k10temp,cpu_thermal,acpitz

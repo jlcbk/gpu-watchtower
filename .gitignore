@@ -1,0 +1,18 @@
+# 构建产物
+build/
+firmware/build/
+firmware/sdkconfig.old
+
+# 凭据（红线：绝不入库）
+firmware/main/rig_net_config.h
+config/token.txt
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+
+# 体积大的可重下载物（SDL 源 tarball）
+third_party/dl/
+vendor/

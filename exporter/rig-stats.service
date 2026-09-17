@@ -1,0 +1,16 @@
+[Unit]
+Description=rig-stats exporter (RLCD lookout screen)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=cui
+EnvironmentFile=/etc/rig-stats.env
+ExecStart=/usr/bin/python3 /opt/rig-stats/server.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

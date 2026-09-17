@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "host": "cui-To-Be-Filled-By-O-E-M",
+  "ts": 1760000000,
+  "net_if": "wlx502b73c9057e",
+  "uptime_s": 302400,
+  "gpu": {
+    "name": null,
+    "temp_c": null,
+    "util_pct": null,
+    "vram_used_gb": null,
+    "vram_total_gb": null,
+    "power_w": null,
+    "power_limit_w": null,
+    "fan_pct": null,
+    "driver": false
+  },
+  "cpu": {
+    "temp_c": 41,
+    "util_pct": 3,
+    "cores_pct": [2, 1, 4, 3, 2, 5]
+  },
+  "mem": {
+    "used_gb": 4.2,
+    "total_gb": 37.0,
+    "util_pct": 11,
+    "swap_used_gb": 0.0,
+    "swap_total_gb": 8.0
+  },
+  "sys": {
+    "load1": 0.1,
+    "net_rx_kbps": 40,
+    "net_tx_kbps": 12,
+    "disks": [
+      {"mnt": "/", "free_gb": 373, "total_gb": 468},
+      {"mnt": "/mnt/model-library", "free_gb": 129, "total_gb": 466}
+    ]
+  }
+}

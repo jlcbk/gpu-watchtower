@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "host": "host-012345678901234567890123456789012345678901",
+  "ts": 1760000000,
+  "net_if": "wlx502b73c9057e",
+  "uptime_s": 302400,
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5060 Ti Founders Edition",
+    "temp_c": 66,
+    "util_pct": 55,
+    "vram_used_gb": 9.5,
+    "vram_total_gb": 16.0,
+    "power_w": 110.0,
+    "power_limit_w": 170,
+    "fan_pct": 55,
+    "driver": true
+  },
+  "cpu": {
+    "temp_c": 48,
+    "util_pct": 35,
+    "cores_pct": [
+      40,
+      35,
+      30,
+      45,
+      25,
+      38
+    ]
+  },
+  "mem": {
+    "used_gb": 22.0,
+    "total_gb": 37.0,
+    "util_pct": 59,
+    "swap_used_gb": 0.8,
+    "swap_total_gb": 8.0
+  },
+  "sys": {
+    "load1": 1.9,
+    "net_rx_kbps": 2400,
+    "net_tx_kbps": 700,
+    "disks": [
+      {
+        "mnt": "/",
+        "free_gb": 373,
+        "total_gb": 468
+      },
+      {
+        "mnt": "/mnt/model-library",
+        "free_gb": 129,
+        "total_gb": 466
+      }
+    ]
+  }
+}
