@@ -18,6 +18,8 @@
 #include "esp_netif.h"
 #include "nvs_flash.h"
 
+#include "rig_ev.h"
+
 #define TAG "rig_wifi"
 
 /* 目标局域网段（须与 rig_net_config.h 的 RK_STATS_HOST 同段） */
@@ -71,6 +73,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         }
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         if (s_connected) {
+            rig_ev("wifi_dc", NULL);
             ESP_LOGW(TAG, "wifi disconnected -> auto reconnect");
         }
         s_connected = false;
@@ -79,12 +82,16 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *ev = (ip_event_got_ip_t *)data;
-        ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&ev->ip_info.ip));
+        char ipstr[16];
+        snprintf(ipstr, sizeof ipstr, IPSTR, IP2STR(&ev->ip_info.ip));
+        ESP_LOGI(TAG, "got ip %s", ipstr);
         if (esp_ip4_addr1(&ev->ip_info.ip) == RK_LAN_A &&
             esp_ip4_addr2(&ev->ip_info.ip) == RK_LAN_B &&
             esp_ip4_addr3(&ev->ip_info.ip) == RK_LAN_C) {
             s_connected = true;
+            rig_ev("ip", "%s", ipstr);
         } else {
+            rig_ev("wrong_subnet", "%s", ipstr);
             ESP_LOGW(TAG, "wrong subnet -> rotate AP and retry");
             rotate_and_disconnect();
         }

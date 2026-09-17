@@ -21,9 +21,11 @@
 #include "freertos/task.h"
 
 #include "driver/gpio.h"
+#include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "sdkconfig.h"
@@ -36,6 +38,7 @@
 #include "rk_stats.h"
 #include "rk_ui.h"
 #include "rig_batt.h"
+#include "rig_ev.h"
 #include "rig_hist.h"
 #include "rig_poll.h"
 #include "rig_wifi.h"
@@ -96,6 +99,9 @@ static int64_t g_calm_since_ms = -1;
 
 /* ---- 事件信号（按键 ISR / poll 完成） ---- */
 static SemaphoreHandle_t g_ev;
+
+/* 深睡原因 RTC 标记（跨深睡存活；下次开机以 wake_lowbatt 事件补报后清除） */
+RTC_DATA_ATTR static uint32_t g_rtc_lowbatt;
 
 #if CONFIG_PM_ENABLE
 static esp_pm_lock_handle_t g_no_ls; /* 电池不在位：禁轻睡保 USB 控制台 */
@@ -248,12 +254,14 @@ static void power_service(void)
         if (ls_released) {
             esp_pm_lock_acquire(g_no_ls);
             ls_released = false;
+            rig_ev("ls", "gated");
             ESP_LOGI(TAG, "light-sleep gated (no battery, usb console kept)");
         }
     } else if (g_batt_mv >= BATT_USB_MV) {
         if (!ls_released) {
             esp_pm_lock_release(g_no_ls);
             ls_released = true;
+            rig_ev("ls", "armed");
             ESP_LOGW(TAG, "light-sleep ARMED (battery present)");
         }
     }
@@ -262,7 +270,11 @@ static void power_service(void)
     /* 低压深睡：电池在位且连续 N 次低于 3.65V（无电池/读数无效不判） */
     if (g_batt_mv >= BATT_USB_MV) {
         if (g_batt_mv < BATT_SLEEP_MV) {
-            if (++g_batt_low_count >= BATT_SLEEP_CONFIRM) {
+            g_batt_low_count++;
+            if (g_batt_low_count == 1) {
+                rig_ev("lowbatt", "%dmV", (int)g_batt_mv); /* 首次越线即记（确认过程看 board.jsonl b 值） */
+            }
+            if (g_batt_low_count >= BATT_SLEEP_CONFIRM) {
                 g_sleep_now = true;
             }
         } else {
@@ -283,12 +295,14 @@ static void power_service(void)
         }
         if (!g_ps_max_active && now - g_calm_since_ms >= PS_MAX_AFTER_CALM_MS) {
             rig_wifi_set_ps(true);
+            rig_ev("ps", "max");
             g_ps_max_active = true;
         }
     } else {
         g_calm_since_ms = -1;
         if (g_ps_max_active) {
             rig_wifi_set_ps(false);
+            rig_ev("ps", "min");
             g_ps_max_active = false;
         }
     }
@@ -307,6 +321,8 @@ static void power_service(void)
 /* ---- 低压深睡（终端屏 + 1h 定时 / BOOT 唤醒复查） ---- */
 static void deep_sleep_now(void)
 {
+    g_rtc_lowbatt = 1; /* RTC 标记跨深睡（下次开机补报 wake_lowbatt） */
+    rig_ev("deep_sleep", "b=%dmV", (int)g_batt_mv); /* 本条大概率来不及上传，靠 RTC 补报 */
     ESP_LOGW(TAG, "battery %dmV < %dmV x%d -> deep sleep", g_batt_mv, BATT_SLEEP_MV,
              g_batt_low_count);
 #if RK_HAS_NET_CONFIG
@@ -344,6 +360,11 @@ void app_main(void)
              0
 #endif
     );
+    rig_ev("boot", "rst=%d fw=P5s", (int)esp_reset_reason());
+    if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
+        rig_ev("wake_lowbatt", "rtc=1");
+        g_rtc_lowbatt = 0;
+    }
 
     /* 按键：输入 + 上拉 + 双沿中断（事件驱动唤醒） */
     gpio_config_t io = {
@@ -431,6 +452,7 @@ void app_main(void)
                 if (any_button_short_press()) {
                     g_page = rk_ui_page_next(g_page);
                     g_calm_since_ms = -1; /* 按键=活动：power_service 会恢复 MIN_MODEM */
+                    rig_ev("page", "%d", (int)g_page);
                     ESP_LOGI(TAG, "button short press -> page %d", (int)g_page);
                 }
                 vTaskDelay(pdMS_TO_TICKS(BTN_WINDOW_STEP_MS));

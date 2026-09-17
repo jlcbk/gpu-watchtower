@@ -20,6 +20,7 @@
 #include "rig_net_config.h" /* gitignore 凭据注入（main.c #error 守卫已保证存在） */
 #include "esp_http_client.h"
 #include "esp_wifi.h"
+#include "rig_ev.h"
 #include "rig_wifi.h"
 #endif
 
@@ -112,6 +113,47 @@ static void alarm_update(rk_poll_state_t *st)
     }
 }
 
+/* 事件批量上传：成功轮询后顺手 POST /beacon；200 才提交（失败下轮重试） */
+static esp_err_t post_events(void)
+{
+    int len = 0, count = 0;
+    const char *body = rig_ev_drain(&len, &count);
+    if (body == NULL) {
+        return ESP_OK;
+    }
+
+    char url[96];
+    snprintf(url, sizeof(url), "http://%s:%d/beacon", RK_STATS_HOST, RK_STATS_PORT);
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .timeout_ms = 2500,
+    };
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (cli == NULL) {
+        return ESP_FAIL;
+    }
+    esp_http_client_set_method(cli, HTTP_METHOD_POST);
+    esp_http_client_set_header(cli, "X-Token", RK_STATS_TOKEN);
+    esp_http_client_set_header(cli, "Content-Type", "application/x-ndjson");
+    esp_err_t err = esp_http_client_open(cli, len);
+    if (err == ESP_OK) {
+        int w = esp_http_client_write(cli, body, len);
+        esp_http_client_fetch_headers(cli);
+        char rsp[64];
+        (void)esp_http_client_read_response(cli, rsp, sizeof rsp - 1);
+        int status = esp_http_client_get_status_code(cli);
+        if (w == len && status == 200) {
+            rig_ev_commit(count);
+            err = ESP_OK;
+        } else {
+            ESP_LOGW(TAG, "beacon POST w=%d/%d status=%d", w, len, status);
+            err = ESP_FAIL;
+        }
+    }
+    esp_http_client_cleanup(cli);
+    return err;
+}
+
 /* 单次 GET /stats：open → fetch_headers → read_response（正文可靠进 body）。
  * 注意 esp_http_client_set_header 的第三参是纯 value——传 "X-Token: xxx" 整串
  * 会变成双重头名导致永远 403。 */
@@ -198,6 +240,8 @@ void rk_poll_step(rk_poll_state_t *st)
         }
         alarm_update(st); /* 可升为 ALARM（迟滞 30s） */
         if (was_offline) {
+            rig_ev("online", "gpu=%.0fC",
+                   snap.gpu.temp_c.present ? snap.gpu.temp_c.value : 0.0);
             ESP_LOGI(TAG, "back online (gpu %s%.0fC)",
                      snap.gpu.temp_c.present ? "" : "--",
                      snap.gpu.temp_c.present ? snap.gpu.temp_c.value : 0.0);
@@ -212,6 +256,7 @@ void rk_poll_step(rk_poll_state_t *st)
             g_fsm.calm_streak = 0;
             if (st->cadence != RK_CAD_BUSY) {
                 st->cadence = RK_CAD_BUSY;
+                rig_ev("cad", "busy");
                 ESP_LOGI(TAG, "cadence -> BUSY (2s)");
             }
         } else if (st->cadence == RK_CAD_BUSY) {
@@ -219,14 +264,17 @@ void rk_poll_step(rk_poll_state_t *st)
             if (g_fsm.calm_streak >= CAD_CALM_STREAK) {
                 st->cadence = RK_CAD_CALM;
                 g_fsm.calm_streak = 0;
+                rig_ev("cad", "calm");
                 ESP_LOGI(TAG, "cadence -> CALM (10s)");
             }
         }
         st->next_delay_ms = (st->cadence == RK_CAD_BUSY) ? POLL_PERIOD_MS : CALM_PERIOD_MS;
+        post_events(); /* 事件批量上传（失败保留待重试） */
     } else {
         g_fsm.fail_streak++;
         if (g_fsm.fail_streak >= OFFLINE_AFTER_FAILS) {
             if (st->state != RK_STATE_OFFLINE) {
+                rig_ev("offline", "%ufails", (unsigned)g_fsm.fail_streak);
                 ESP_LOGW(TAG, "offline after %u consecutive failures",
                          (unsigned)g_fsm.fail_streak);
             }

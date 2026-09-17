@@ -9,6 +9,7 @@ idf_component_register(
          "rig_wifi.c"
          "rig_batt.c"
          "rig_hist.c"
+         "rig_ev.c"
          "${CMAKE_CURRENT_LIST_DIR}/../../shared/display/rk_frame.c"
          "${CMAKE_CURRENT_LIST_DIR}/../../shared/stats/rk_json.c"
          "${CMAKE_CURRENT_LIST_DIR}/../../shared/stats/rk_stats.c"

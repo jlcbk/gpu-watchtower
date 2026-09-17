@@ -40,20 +40,25 @@ _hist_last_ts = 0
 # JSONL 逐条落盘（>4MB 轮转保留一代 .old）；轮询时间戳本身即节拍/离线的证据。
 BEACON_DIR = "/opt/rig-stats/logs"
 BEACON_PATH = os.path.join(BEACON_DIR, "board.jsonl")
+EVENTS_PATH = os.path.join(BEACON_DIR, "events.jsonl")  # 板子事件日志（POST /beacon）
 BEACON_MAX_BYTES = 4 * 1024 * 1024
 _beacon_lock = threading.Lock()
+
+def _append_log(path, lines):
+    """带轮转的追加（>4MB 保留一代 .old）；调用方持 _beacon_lock。"""
+    try:
+        if os.path.getsize(path) > BEACON_MAX_BYTES:
+            os.replace(path, path + ".old")
+    except OSError:
+        pass
+    with open(path, "a") as f:
+        f.write("\n".join(lines) + "\n")
 
 def beacon_log(ip, b, c, r):
     try:
         with _beacon_lock:
-            try:
-                if os.path.getsize(BEACON_PATH) > BEACON_MAX_BYTES:
-                    os.replace(BEACON_PATH, BEACON_PATH + ".old")
-            except OSError:
-                pass
-            with open(BEACON_PATH, "a") as f:
-                f.write(json.dumps({"ts": int(time.time()), "ip": ip,
-                                    "b": b, "c": c, "r": r}) + "\n")
+            _append_log(BEACON_PATH, [json.dumps(
+                {"ts": int(time.time()), "ip": ip, "b": b, "c": c, "r": r})])
     except Exception:
         pass  # 信标日志失败不影响服务
 
@@ -197,6 +202,44 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_POST(self):
+        path = self.path.split("?")[0]
+        if path != "/beacon":
+            self._send(404, {"error": "not found"})
+            return
+        if not TOKEN or not hmac.compare_digest(self.headers.get("X-Token", ""), TOKEN):
+            self._send(403, {"error": "forbidden"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 32768:
+            self._send(400, {"error": "bad length"})
+            return
+        body = self.rfile.read(length).decode("utf-8", "replace")
+        out = []
+        for line in body.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            rec = {"recv_ts": int(time.time()), "ip": self.client_address[0]}
+            try:
+                rec["ev"] = json.loads(line)
+            except Exception:
+                rec["raw"] = line[:200]
+            out.append(json.dumps(rec, separators=(",", ":")))
+        accepted = 0
+        if out:
+            try:
+                with _beacon_lock:
+                    _append_log(EVENTS_PATH, out)
+                accepted = len(out)
+            except Exception:
+                self._send(500, {"error": "log write failed"})
+                return
+        self._send(200, {"ok": True, "accepted": accepted})
 
     def do_GET(self):
         path = self.path.split("?")[0]
