@@ -145,6 +145,7 @@ static void env_poll(void)
 #define CPU_PROBE_MS 60000u
 static int64_t g_probe_last_ms;
 static uint32_t g_probe_cc_prev;
+static volatile uint32_t g_btn_isr_count; /* P5D：ISR 风暴探针（噪声脚会高频触发；ISR 在下方） */
 
 static void cpu_probe(void)
 {
@@ -170,8 +171,14 @@ static void cpu_probe(void)
     } else if (pct > 100) {
         pct = 100;
     }
-    ESP_LOGI(TAG, "cpu run=%d%% (dcc=%u dt=%lldus)", pct, (unsigned)dcc, (long long)dt_us);
-    rig_ev("cpu", "run=%d%%", pct);
+    uint32_t isr = g_btn_isr_count;
+    g_btn_isr_count = 0;
+    ESP_LOGI(TAG, "cpu run=%d%% isr=%u (dcc=%u dt=%lldus)", pct, (unsigned)isr,
+             (unsigned)dcc, (long long)dt_us);
+    rig_ev("cpu", "run=%d%% isr=%u", pct, (unsigned)isr);
+#if CONFIG_PM_ENABLE
+    esp_pm_dump_locks(stdout); /* 锁持有者实名清单（USB 控制台可见时） */
+#endif
 }
 
 /* ---- 电池采样（节律 + 文本 + 原始 mV） ---- */
@@ -233,6 +240,7 @@ static bool any_button_short_press(void)
 static void btn_isr(void *arg)
 {
     (void)arg;
+    g_btn_isr_count++;
     BaseType_t woken = pdFALSE;
     xSemaphoreGiveFromISR(g_ev, &woken);
     portYIELD_FROM_ISR(woken);
@@ -385,6 +393,29 @@ static void power_service(void)
         ESP_LOGI(TAG, "hb: state=%d cad=%s batt=%dmV trend=%d",
                  (int)g_model.state, calm ? "calm" : "busy", g_batt_mv, g_trend_len);
     }
+
+    /* P5T 诊断：WiFi 停用隔离窗（一次性，开机 8-10min，恰在 ps max+LI10 稳态内）。
+     * 悬案：CPU 稳态 run=22%（40MHz 空转地板特征）= 轻睡未发生；锁表清白 + USB 主机
+     * 假设已排除（充电器语境同值）→ 头号嫌疑=WiFi 关联态 TSF 否决轻睡回调
+     * （esp_wifi_internal_is_tsf_active，esp_wifi_stop 时注销）。
+     * 窗内探针照常上报（事件缓冲，恢复后补传）：run% 崩到个位数 ⇒ WiFi 坐实；
+     * 不塌 ⇒ 下一版上任务级统计点名。诊断固件专用，勿入产线。 */
+    {
+        static bool s_wtest_off, s_wtest_done;
+        int64_t up_s = esp_timer_get_time() / 1000000LL;
+        if (!s_wtest_done && !s_wtest_off && up_s >= 480 && up_s < 600) {
+            rig_ev("wtest", "off@%lld", (long long)up_s);
+            ESP_LOGW(TAG, "wtest: esp_wifi_stop() (diagnostic window)");
+            esp_wifi_stop();
+            s_wtest_off = true;
+        } else if (s_wtest_off && !s_wtest_done && up_s >= 600) {
+            esp_wifi_start();
+            esp_wifi_connect();
+            rig_ev("wtest", "on@%lld", (long long)up_s);
+            ESP_LOGW(TAG, "wtest: wifi back (diagnostic window over)");
+            s_wtest_done = true;
+        }
+    }
 #endif
 }
 
@@ -430,7 +461,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5C", (int)esp_reset_reason()); /* P5C=P5L+cpu探针；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5T", (int)esp_reset_reason()); /* P5T=P5D+wifi隔离窗（诊断专用）；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
