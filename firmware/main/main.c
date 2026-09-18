@@ -449,7 +449,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5V", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5W", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
@@ -463,13 +463,9 @@ void app_main(void)
         .intr_type = GPIO_INTR_ANYEDGE,
     };
     gpio_config(&io);
-    /* P5V：睡眠期引脚态（2026-09-18 P5U 实测 isr≈5100/min——轻睡一开，睡眠期上拉
-     * 失配→按钮脚浮空→噪声边沿风暴（85 次/s 唤醒，吃掉全部剩余 CPU 占空比）。
-     * 睡眠期显式保持输入+上拉不断电，消除浮空噪声源。 */
-    gpio_sleep_set_direction((gpio_num_t)BTN_BOOT_GPIO, GPIO_MODE_INPUT);
-    gpio_sleep_set_direction((gpio_num_t)BTN_KEY_GPIO, GPIO_MODE_INPUT);
-    gpio_sleep_set_pull_mode((gpio_num_t)BTN_BOOT_GPIO, GPIO_PULLUP_ONLY);
-    gpio_sleep_set_pull_mode((gpio_num_t)BTN_KEY_GPIO, GPIO_PULLUP_ONLY);
+    /* P5W：P5V 的 gpio_sleep_set_* 两对调用疑似开机期致命（两次哈希校验刷入后
+     * 板不起立：无信标无事件，下载模式正常）——先撤掉隔离验证；ISR 风暴改日
+     * 换思路（如 POSEDGE 触发/去抖窗口）再战。 */
 
     g_ev = xSemaphoreCreateBinary();
 
