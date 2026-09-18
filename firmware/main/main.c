@@ -26,6 +26,7 @@
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
+#include "esp_cpu.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "sdkconfig.h"
@@ -130,6 +131,47 @@ static void env_poll(void)
     if (rig_env_read(&t, &h) == ESP_OK) {
         snprintf(g_env_text, sizeof g_env_text, "%.1fC %.0f%%", t, h);
     }
+}
+
+/* ---- CPU 运行占比探针（2026-09-18 电流表 27mA 地板悬案） ----
+ * 原理：CPU 周期计数器（ccount）在轻睡时停走，esp_timer 走墙钟。
+ *   run% = Δccount / (240MHz × Δ墙钟)
+ * 判读（本设备画像：CALM 10s 一拍、醒 ~0.3s）：
+ *   ≲5%   轻睡在干活，地板在板级外围（codec/PSRAM/USB 外设）→ 下一仗外围休眠
+ *   ≈17%  只降频不睡觉（DFS 地板 40MHz 常跑）→ 有东西拽着禁睡锁，逐个揪
+ *   明显更高 → 有忙循环/高频唤醒任务
+ * 注意 run% 是「相对 240MHz 的平均时钟占比」，DFS 下醒着跑 40MHz 也只显示 17%，
+ * 与「是否入睡」可区分。60s 一报，走事件通道（服务端可看，不依赖串口）。 */
+#define CPU_PROBE_MS 60000u
+static int64_t g_probe_last_ms;
+static uint32_t g_probe_cc_prev;
+
+static void cpu_probe(void)
+{
+    int64_t now = (int64_t)(esp_timer_get_time() / 1000LL);
+    if (g_probe_last_ms != 0 && now - g_probe_last_ms < CPU_PROBE_MS) {
+        return;
+    }
+    if (g_probe_last_ms == 0) { /* 首次调用只采样，不结算 */
+        g_probe_last_ms = (now != 0) ? now : 1;
+        g_probe_cc_prev = esp_cpu_get_cycle_count();
+        return;
+    }
+    int64_t dt_us = (now - g_probe_last_ms) * 1000LL;
+    g_probe_last_ms = now;
+
+    uint32_t cc = esp_cpu_get_cycle_count();
+    uint32_t dcc = cc - g_probe_cc_prev; /* 环绕安全（无符号减） */
+    g_probe_cc_prev = cc;
+    double run = (double)dcc / (240.0e6 * ((double)dt_us / 1e6));
+    int pct = (int)(run * 100.0);
+    if (pct < 0) {
+        pct = 0;
+    } else if (pct > 100) {
+        pct = 100;
+    }
+    ESP_LOGI(TAG, "cpu run=%d%% (dcc=%u dt=%lldus)", pct, (unsigned)dcc, (long long)dt_us);
+    rig_ev("cpu", "run=%d%%", pct);
 }
 
 /* ---- 电池采样（节律 + 文本 + 原始 mV） ---- */
@@ -273,6 +315,7 @@ static void power_service(void)
 {
     batt_poll();
     env_poll();
+    cpu_probe();
 
 #if CONFIG_PM_ENABLE
     /* 轻睡门控：电池不在位持锁保 USB 控制台；在位放行真睡 */
@@ -387,7 +430,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5L", (int)esp_reset_reason()); /* P5L=P5s+listen_interval；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5C", (int)esp_reset_reason()); /* P5C=P5L+cpu探针；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
