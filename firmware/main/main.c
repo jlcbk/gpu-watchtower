@@ -393,29 +393,6 @@ static void power_service(void)
         ESP_LOGI(TAG, "hb: state=%d cad=%s batt=%dmV trend=%d",
                  (int)g_model.state, calm ? "calm" : "busy", g_batt_mv, g_trend_len);
     }
-
-    /* P5T 诊断：WiFi 停用隔离窗（一次性，开机 8-10min，恰在 ps max+LI10 稳态内）。
-     * 悬案：CPU 稳态 run=22%（40MHz 空转地板特征）= 轻睡未发生；锁表清白 + USB 主机
-     * 假设已排除（充电器语境同值）→ 头号嫌疑=WiFi 关联态 TSF 否决轻睡回调
-     * （esp_wifi_internal_is_tsf_active，esp_wifi_stop 时注销）。
-     * 窗内探针照常上报（事件缓冲，恢复后补传）：run% 崩到个位数 ⇒ WiFi 坐实；
-     * 不塌 ⇒ 下一版上任务级统计点名。诊断固件专用，勿入产线。 */
-    {
-        static bool s_wtest_off, s_wtest_done;
-        int64_t up_s = esp_timer_get_time() / 1000000LL;
-        if (!s_wtest_done && !s_wtest_off && up_s >= 480 && up_s < 600) {
-            rig_ev("wtest", "off@%lld", (long long)up_s);
-            ESP_LOGW(TAG, "wtest: esp_wifi_stop() (diagnostic window)");
-            esp_wifi_stop();
-            s_wtest_off = true;
-        } else if (s_wtest_off && !s_wtest_done && up_s >= 600) {
-            esp_wifi_start();
-            esp_wifi_connect();
-            rig_ev("wtest", "on@%lld", (long long)up_s);
-            ESP_LOGW(TAG, "wtest: wifi back (diagnostic window over)");
-            s_wtest_done = true;
-        }
-    }
 #endif
 }
 
@@ -461,7 +438,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5T", (int)esp_reset_reason()); /* P5T=P5D+wifi隔离窗（诊断专用）；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5U", (int)esp_reset_reason()); /* P5U=轻睡总开关修复；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
@@ -491,11 +468,14 @@ void app_main(void)
         esp_pm_config_t pm = {
             .max_freq_mhz = 240,
             .min_freq_mhz = 40,
+            /* 轻睡总开关（2026-09-18 悬案结案：缺失该字段 → PM 只做 DFS 40MHz 空转，
+             * run=22% 免疫一切环境变量；Kconfig 的 PM/tickless 不替代此运行时开关） */
+            .light_sleep_enable = true,
         };
         esp_pm_configure(&pm);
         esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "rk_nols", &g_no_ls);
         esp_pm_lock_acquire(g_no_ls); /* 默认禁轻睡；电池在位后由 power_service 放行 */
-        ESP_LOGI(TAG, "pm ready: tickless+dfs, light-sleep gated until battery present");
+        ESP_LOGI(TAG, "pm ready: tickless+dfs+light-sleep, gated until battery present");
     }
 #endif
 
