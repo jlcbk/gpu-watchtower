@@ -79,7 +79,7 @@
  * ~1.7mAh/天 ≈ 2500mAh 电芯 0.07%/天，实测可忽略）；插电后电压秒抬 ~4.1V
  * → 下一整点复查必过 → 复活。急性子路径=BOOT 键（ext0）立即唤醒复查。
  * 手动断电=长按 PWR。 */
-#define DEEP_SLEEP_RECHECK_S 3600
+#define DEEP_SLEEP_RECHECK_S 3600  /* 复查间隔（秒）；esp_deep_sleep 收微秒，调用处换算 */
 #define PS_MAX_AFTER_CALM_MS 300000 /* CALM 持续 5min → WiFi 降 MAX_MODEM */
 #define BATT_POLL_MS         10000  /* 电池采样节律 */
 #define EV_TIMEOUT_MS        10000  /* 主循环事件等待兜底（同电池节律） */
@@ -358,7 +358,7 @@ static void deep_sleep_now(void)
     rk_ui_sleep_screen();
     /* BOOT(ext0, GPIO0 RTC pad 低电平) 可立即唤醒复查；另每 1h 纯电压复查 */
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
-    esp_deep_sleep(DEEP_SLEEP_RECHECK_S); /* 不返回 */
+    esp_deep_sleep((uint64_t)DEEP_SLEEP_RECHECK_S * 1000000ULL); /* 不返回 */
 }
 
 /* 开机电池复查：电芯在位但仍低于唤醒阈值 → 休眠屏 + 回睡（不连 WiFi） */
@@ -449,7 +449,7 @@ void app_main(void)
     if (!boot_battery_gate()) {
         rk_ui_sleep_screen();
         esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); /* BOOT 唤醒复查 */
-        esp_deep_sleep(DEEP_SLEEP_RECHECK_S); /* 仍低 → 回睡（1h 后再查） */
+        esp_deep_sleep((uint64_t)DEEP_SLEEP_RECHECK_S * 1000000ULL); /* 仍低 → 回睡（1h 后再查） */
     }
 
 #if RK_HAS_NET_CONFIG
