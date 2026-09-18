@@ -20,7 +20,7 @@ DIFF="$ROOT/tools/golden_diff.py"
 GOLDEN="${GOLDEN_DIR:-$ROOT/golden}"
 
 # 确定性公共参数（任务书 P2b §工作范围 3）
-COMMON="--clock 21:04 --trend-seed 42 --batt 4.12V"
+COMMON='--clock 21:04 --trend-seed 42 --batt 4.12V --env "24.9C 36%"'
 
 # 帧清单（14）：name|fixture|state|page|extra
 #   8 基础 = 2 页 × normal/offline/nodriver/alarm
@@ -51,9 +51,10 @@ render_frames() { # <outdir> — 14 帧确定性渲染
     mkdir -p "$_out"
     printf '%s\n' "$FRAMES" | while IFS='|' read -r _name _fx _st _pg _extra; do
         [ -n "$_name" ] || continue
-        # shellcheck disable=SC2086 — COMMON/_extra 是有意分词的参数串
-        "$BIN" --fixture "$PROTO/$_fx" --state "$_st" --page "$_pg" \
-               $COMMON $_extra --png "$_out/$_name.png" >/dev/null \
+        # COMMON/_extra 是本文件内受控字面量串；eval 展开以支持值内空格
+        # （--env "24.9C 36%"），引号在 COMMON 定义处显式给出。
+        eval '"$BIN" --fixture "$PROTO/$_fx" --state "$_st" --page "$_pg"' \
+               "$COMMON $_extra" --png "$_out/$_name.png" >/dev/null \
             || echo "[render] FAILED: $_name（sim 非零退出）"
         echo "[render] $_name"
     done

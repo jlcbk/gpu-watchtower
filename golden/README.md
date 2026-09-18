@@ -1,9 +1,13 @@
 # golden/ — UI 像素基线（P2b 冻结）
 
-- **冻结日期**：2026-09-17（子代理 P2b 执行时冻结；UI 现状 = 2026-09-17 五轮真机反馈定稿，
-  真源 `shared/ui/rk_ui.c`，本卡未改 UI）
+- **冻结日期**：2026-09-17（P2b 首冻；同日 env-footer 变更后守卫重冻，见下）
+- **重冻记录**：2026-09-17 底栏新增温湿度槽（SHTC3 环境显示）——页码缩至 w88、
+  env 槽 x[100..204]、离线小标 152→124。`GOLDEN_OVERWRITE=1` 守卫流程重生成，
+  逐帧机械核对（离线帧 env 区去标矩形后墨点=0 + 在线帧字形墨点≈158）+ VLM 目检
+  busy 帧底栏四项无重叠，14/14 PASS + 注入自检通过。
 - **内容**：400×300 1-bit 灰度 PNG × 14 帧，模拟器确定性渲染
-  （`--clock 21:04 --trend-seed 42 --batt 4.12V`，stored zlib 无随机因素，逐字节可复现）
+  （`--clock 21:04 --trend-seed 42 --batt 4.12V --env "24.9C 36%"`
+  ，stored zlib 无随机因素，逐字节可复现）
 - **格式**：标准 PNG（bit depth 1 / grayscale / filter None / 流式 CRC32），
   单帧 15,368 B。P2a 旧 writer（IDAT CRC 恒 0、8-bit 虚胖 120KB）已于 P2b 修复。
 
@@ -31,7 +35,7 @@ GOLDEN_OVERWRITE=1 tools/golden_freeze.sh
 |---|---|---|---|---|---|
 | page1-normal.png | stats.normal.json | normal | 1 | — | GPU 页全量基线 |
 | page2-normal.png | stats.normal.json | normal | 2 | — | SYS 页全量基线 |
-| page1-offline.png | stats.normal.json | offline | 1 | — | 离线仅底栏「离线」黑标，页面/数据不接管 |
+| page1-offline.png | stats.normal.json | offline | 1 | — | 离线仅底栏「离线」黑标（x124），env 槽让位清空，页面/数据不接管 |
 | page2-offline.png | stats.normal.json | offline | 2 | — | 同上（SYS 页） |
 | page1-nodriver.png | stats.nodriver.json | nodriver | 1 | — | gpu.driver=false → 右列让位「驱动未装」框、大字 --、走势隐线 |
 | page2-nodriver.png | stats.nodriver.json | nodriver | 2 | — | 驱动缺失不影响 SYS 页 |

@@ -38,6 +38,7 @@
 #include "rk_stats.h"
 #include "rk_ui.h"
 #include "rig_batt.h"
+#include "rig_env.h"
 #include "rig_ev.h"
 #include "rig_hist.h"
 #include "rig_poll.h"
@@ -112,6 +113,24 @@ RTC_DATA_ATTR static uint32_t g_rtc_lowbatt;
 #if CONFIG_PM_ENABLE
 static esp_pm_lock_handle_t g_no_ls; /* 电池不在位：禁轻睡保 USB 控制台 */
 #endif
+
+/* ---- 环境温湿度（板载 SHTC3，60s 低频采样；失败保留旧值） ---- */
+#define ENV_POLL_MS 60000u
+static char g_env_text[16];
+static int64_t g_env_last_ms;
+
+static void env_poll(void)
+{
+    int64_t now = (int64_t)(esp_timer_get_time() / 1000LL);
+    if (g_env_last_ms != 0 && now - g_env_last_ms < ENV_POLL_MS) {
+        return;
+    }
+    g_env_last_ms = (now != 0) ? now : 1;
+    float t, h;
+    if (rig_env_read(&t, &h) == ESP_OK) {
+        snprintf(g_env_text, sizeof g_env_text, "%.1fC %.0f%%", t, h);
+    }
+}
 
 /* ---- 电池采样（节律 + 文本 + 原始 mV） ---- */
 static void batt_poll(void)
@@ -239,6 +258,7 @@ static void model_from_poll(void)
     g_model.last_online = g_poll.last_online_hhmm;
     g_model.clock_text = g_poll.have_snapshot ? g_poll.last_online_hhmm : "--";
     g_model.batt_text = g_batt_text;
+    g_model.env_text = g_env_text;
     g_model.gpu_busy = g_model.stats.gpu.util_pct.present &&
                        g_model.stats.gpu.util_pct.value >= 15.0; /* 标题行「渲染中」牌 */
 }
@@ -252,6 +272,7 @@ static void app_render(void)
 static void power_service(void)
 {
     batt_poll();
+    env_poll();
 
 #if CONFIG_PM_ENABLE
     /* 轻睡门控：电池不在位持锁保 USB 控制台；在位放行真睡 */
@@ -383,9 +404,12 @@ void app_main(void)
 
     g_ev = xSemaphoreCreateBinary();
 
-    /* 电池 ADC */
+    /* 电池 ADC + 温湿度（失败不挡启动：对应位显 "--"/空） */
     if (rig_batt_init() != ESP_OK) {
         ESP_LOGW(TAG, "battery adc unavailable");
+    }
+    if (rig_env_init() != ESP_OK) {
+        ESP_LOGW(TAG, "env sensor unavailable");
     }
 
 #if CONFIG_PM_ENABLE

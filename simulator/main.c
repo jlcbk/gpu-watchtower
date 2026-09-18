@@ -46,6 +46,7 @@ typedef struct {
     long trend_seed;       /* --trend-seed */
     const char *batt;      /* --batt */
     int busy;              /* --busy */
+    const char *env;       /* --env */
 } sim_opts_t;
 
 static void usage(const char *prog)
@@ -61,7 +62,8 @@ static void usage(const char *prog)
            "  --alarm-src <gpu|cpu>    alarm source label (default gpu)\n"
            "  --trend-seed <N>         deterministic trend walk seed (default 42)\n"
            "  --batt <TEXT>            footer battery slot, e.g. \"4.12V\" / \"USB\" (default off)\n"
-           "  --busy                   show the rendering busy tag (default off)\n",
+           "  --busy                   show the rendering busy tag (default off)\n"
+           "  --env <TEXT>             footer env slot, e.g. \"24.9C 36%\" (default off)\n",
            prog);
 }
 
@@ -97,6 +99,7 @@ static void parse_args(int argc, char **argv, sim_opts_t *o)
         else if (strcmp(a, "--trend-seed") == 0 && i + 1 < argc) o->trend_seed = atol(argv[++i]);
         else if (strcmp(a, "--batt") == 0 && i + 1 < argc) o->batt = argv[++i];
         else if (strcmp(a, "--busy") == 0) o->busy = 1;
+        else if (strcmp(a, "--env") == 0 && i + 1 < argc) o->env = argv[++i];
         else { fprintf(stderr, "[sim] ERROR: unknown/incomplete argument: %s\n", a); usage(argv[0]); exit(2); }
     }
     if (o->fixture == NULL) {
@@ -344,6 +347,7 @@ int main(int argc, char **argv)
     model.last_online = online_buf;
     model.batt_text = opts.batt;
     model.gpu_busy = opts.busy;
+    model.env_text = opts.env;
     switch (opts.state) {
         case ST_OFFLINE: model.state = RK_STATE_OFFLINE; break;
         case ST_NODRIVER: model.state = RK_STATE_NODRIVER; break;

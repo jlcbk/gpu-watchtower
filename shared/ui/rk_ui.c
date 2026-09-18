@@ -160,6 +160,7 @@ typedef struct {
     lv_obj_t *p1_root, *p2_root, *alarm_root;
     lv_obj_t *p1_title, *p1_batt, *p1_wifi;
     lv_obj_t *p1_busy, *p1_busy_l;
+    lv_obj_t *p1_env;
     lv_obj_t *p1_temp_bg;   /* ≥80°C 反白小块（黑底容器） */
     lv_obj_t *p1_temp;      /* 超大温度（在 temp_bg 内） */
     lv_obj_t *p1_gpuname;
@@ -175,6 +176,7 @@ typedef struct {
 
     lv_obj_t *p2_title, *p2_batt, *p2_wifi;
     lv_obj_t *p2_busy, *p2_busy_l;
+    lv_obj_t *p2_env;
     lv_obj_t *p2_cpu_l;
     lv_obj_t *p2_cpu_b;
     lv_obj_t *p2_ram_l, *p2_ram_b, *p2_swap_l, *p2_swap_b;
@@ -271,7 +273,7 @@ static void page1_create(lv_obj_t *root)
 
     /* 离线小标（底栏反白小块；离线不接管页面，数据沿用上一份好快照） */
     ui.p1_offtag = lv_obj_create(root);
-    ui_box(ui.p1_offtag, 152, BOT_Y + 2, 56, 18);
+    ui_box(ui.p1_offtag, 124, BOT_Y + 2, 56, 18);
     lv_obj_set_style_bg_color(ui.p1_offtag, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui.p1_offtag, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(ui.p1_offtag, 0, LV_PART_MAIN);
@@ -290,7 +292,9 @@ static void page1_create(lv_obj_t *root)
         lv_obj_set_style_line_color(sep_line, lv_color_black(), 0);
         lv_obj_set_style_line_width(sep_line, 1, 0);
     }
-    ui.p1_pageind = ui_text(root, F_BODY, RK_M, BOT_Y, 140, BOT_H);
+    ui.p1_pageind = ui_text(root, F_BODY, RK_M, BOT_Y, 88, BOT_H);
+    /* 底栏环境位（板载温湿度；离线时让位给「离线」小标） */
+    ui.p1_env = ui_text(root, F_BODY, 100, BOT_Y, 104, BOT_H);
     /* 底栏电池位（2026-09-17 用户定稿：与时钟同排） */
     ui.p1_batt = ui_text(root, F_BODY, 214, BOT_Y, 82, BOT_H);
     lv_obj_set_style_text_align(ui.p1_batt, LV_TEXT_ALIGN_RIGHT, 0);
@@ -393,6 +397,7 @@ static void page1_apply(const rk_ui_model_t *m)
     set_visible(ui.p1_offtag, m->state == RK_STATE_OFFLINE);
 
     set_txt(ui.p1_pageind, "P1/2 GPU");
+    set_txt(ui.p1_env, (m->env_text != NULL && m->env_text[0] != '\0' && m->state != RK_STATE_OFFLINE) ? m->env_text : "");
     set_txt(ui.p1_clock, (m->clock_text != NULL) ? m->clock_text : "--");
 }
 
@@ -425,7 +430,7 @@ static void page2_create(lv_obj_t *root)
 
     /* 离线小标（底栏反白小块；离线不接管页面） */
     ui.p2_offtag = lv_obj_create(root);
-    ui_box(ui.p2_offtag, 152, BOT_Y + 2, 56, 18);
+    ui_box(ui.p2_offtag, 124, BOT_Y + 2, 56, 18);
     lv_obj_set_style_bg_color(ui.p2_offtag, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui.p2_offtag, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(ui.p2_offtag, 0, LV_PART_MAIN);
@@ -444,7 +449,8 @@ static void page2_create(lv_obj_t *root)
         lv_obj_set_style_line_color(sep_line, lv_color_black(), 0);
         lv_obj_set_style_line_width(sep_line, 1, 0);
     }
-    ui.p2_pageind = ui_text(root, F_BODY, RK_M, BOT_Y, 140, BOT_H);
+    ui.p2_pageind = ui_text(root, F_BODY, RK_M, BOT_Y, 88, BOT_H);
+    ui.p2_env = ui_text(root, F_BODY, 100, BOT_Y, 104, BOT_H);
     ui.p2_batt = ui_text(root, F_BODY, 214, BOT_Y, 82, BOT_H);
     lv_obj_set_style_text_align(ui.p2_batt, LV_TEXT_ALIGN_RIGHT, 0);
     ui.p2_clock = ui_text(root, F_BODY, RK_W - RK_M - 90, BOT_Y, 90, BOT_H);
@@ -526,6 +532,7 @@ static void page2_apply(const rk_ui_model_t *m)
     set_visible(ui.p2_offtag, m->state == RK_STATE_OFFLINE);
 
     set_txt(ui.p2_pageind, "P2/2 SYS");
+    set_txt(ui.p2_env, (m->env_text != NULL && m->env_text[0] != '\0' && m->state != RK_STATE_OFFLINE) ? m->env_text : "");
     set_txt(ui.p2_clock, (m->clock_text != NULL) ? m->clock_text : "--");
 }
 

@@ -8,6 +8,7 @@ idf_component_register(
          "rig_poll.c"
          "rig_wifi.c"
          "rig_batt.c"
+         "rig_env.c"
          "rig_hist.c"
          "rig_ev.c"
          "${CMAKE_CURRENT_LIST_DIR}/../../shared/display/rk_frame.c"
@@ -17,7 +18,7 @@ idf_component_register(
          "${CMAKE_CURRENT_LIST_DIR}/../../shared/ui/rk_font_unifont16.c"
     INCLUDE_DIRS "."
     REQUIRES rk_lvgl display_st7305 nvs_flash esp_wifi esp_event esp_netif
-             esp_timer esp_driver_gpio esp_lcd esp_http_client esp_adc)
+             esp_timer esp_driver_gpio esp_lcd esp_http_client esp_adc esp_driver_i2c)
 
 # include 面：shared/display（rk_frame.h，display_st7305 已 PUBLIC 传递）、
 # shared/stats（rk_stats/rk_json）、shared/ui（rk_ui/rk_font）。

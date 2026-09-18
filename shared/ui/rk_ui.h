@@ -45,6 +45,7 @@ typedef struct {
     const char *last_online;  /* OFFLINE 横幅："21:04"（宿主格式化）；NULL → "--" */
     const char *clock_text;   /* 底栏右 "HH:MM"（宿主格式化）；NULL → "--" */
     const char *batt_text;    /* 底栏电池位："4.05V" / "USB"（宿主格式化）；NULL/"" → 隐藏 */
+    const char *env_text;     /* 底栏环境位："24.9C 36%"（板载 SHTC3）；NULL/"" → 隐藏 */
     bool gpu_busy;            /* 标题行「渲染中」反白牌（util≥15%）；空载不显示 */
     /* 60min 走势（°C，trend[0] 最旧 → trend[len-1] 最新；宿主持有存储） */
     const float *trend;
