@@ -146,7 +146,6 @@ static void env_poll(void)
 static int64_t g_probe_last_ms;
 static uint32_t g_probe_cc_prev;
 static volatile uint32_t g_btn_isr_count; /* P5D：ISR 风暴探针（噪声脚会高频触发；ISR 在下方） */
-static volatile uint32_t g_btn_isr_boot, g_btn_isr_key; /* P5V：分脚计数（睡眠期噪声归因；ISR 在下方） */
 
 static void cpu_probe(void)
 {
@@ -173,15 +172,10 @@ static void cpu_probe(void)
         pct = 100;
     }
     uint32_t isr = g_btn_isr_count;
-    uint32_t isr_b = g_btn_isr_boot, isr_k = g_btn_isr_key;
     g_btn_isr_count = 0;
-    g_btn_isr_boot = 0;
-    g_btn_isr_key = 0;
-    ESP_LOGI(TAG, "cpu run=%d%% isr=%u(boot=%u key=%u) (dcc=%u dt=%lldus)", pct,
-             (unsigned)isr, (unsigned)isr_b, (unsigned)isr_k, (unsigned)dcc,
-             (long long)dt_us);
-    rig_ev("cpu", "run=%d%% isr=%u b=%u k=%u", pct, (unsigned)isr,
-           (unsigned)isr_b, (unsigned)isr_k);
+    ESP_LOGI(TAG, "cpu run=%d%% isr=%u (dcc=%u dt=%lldus)", pct, (unsigned)isr,
+             (unsigned)dcc, (long long)dt_us);
+    rig_ev("cpu", "run=%d%% isr=%u", pct, (unsigned)isr);
 #if CONFIG_PM_ENABLE
     esp_pm_dump_locks(stdout); /* 锁持有者实名清单（USB 控制台可见时） */
 #endif
@@ -247,11 +241,6 @@ static void btn_isr(void *arg)
 {
     (void)arg;
     g_btn_isr_count++;
-    if ((intptr_t)arg == BTN_BOOT_GPIO) {
-        g_btn_isr_boot++;
-    } else {
-        g_btn_isr_key++;
-    }
     BaseType_t woken = pdFALSE;
     xSemaphoreGiveFromISR(g_ev, &woken);
     portYIELD_FROM_ISR(woken);
@@ -449,7 +438,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5W", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5U", (int)esp_reset_reason()); /* P5U=轻睡总开关修复；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
@@ -463,9 +452,6 @@ void app_main(void)
         .intr_type = GPIO_INTR_ANYEDGE,
     };
     gpio_config(&io);
-    /* P5W：P5V 的 gpio_sleep_set_* 两对调用疑似开机期致命（两次哈希校验刷入后
-     * 板不起立：无信标无事件，下载模式正常）——先撤掉隔离验证；ISR 风暴改日
-     * 换思路（如 POSEDGE 触发/去抖窗口）再战。 */
 
     g_ev = xSemaphoreCreateBinary();
 
@@ -528,12 +514,12 @@ void app_main(void)
     model_from_poll();
     app_render();
 
-    /* 按键 ISR 注册（P5V：arg 带 GPIO 号供分脚计数） */
+    /* 按键 ISR 注册 */
     if (gpio_install_isr_service(0) != ESP_OK) {
         ESP_LOGW(TAG, "isr service install failed (button falls back to window sampling)");
     } else {
-        gpio_isr_handler_add(BTN_BOOT_GPIO, btn_isr, (void *)(intptr_t)BTN_BOOT_GPIO);
-        gpio_isr_handler_add(BTN_KEY_GPIO, btn_isr, (void *)(intptr_t)BTN_KEY_GPIO);
+        gpio_isr_handler_add(BTN_BOOT_GPIO, btn_isr, NULL);
+        gpio_isr_handler_add(BTN_KEY_GPIO, btn_isr, NULL);
     }
 
 #if RK_HAS_NET_CONFIG
