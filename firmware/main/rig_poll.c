@@ -154,15 +154,31 @@ static esp_err_t post_events(void)
     return err;
 }
 
-/* 单次 GET /stats：open → fetch_headers → read_response（正文可靠进 body）。
- * 注意 esp_http_client_set_header 的第三参是纯 value——传 "X-Token: xxx" 整串
- * 会变成双重头名导致永远 403。 */
+/* ---- /stats 长连接轮询（keep-alive，2026-09-18）----
+ * 句柄跨轮询复用：TCP 握手只做一次，之后每拍仅 请求+响应 2-3 个无线包
+ * （旧版每拍 init→open→cleanup，握手+拆链 ~7-9 包，纯开销）。仅 query 变
+ * （信标参数）不触发重连；连接被掐（路由器空闲超时/服务重启）→ perform 报错
+ * → cleanup 置空，下轮自动重建。服务端 HTTP/1.1+Content-Length 天然支持。
+ * 注：esp_http_client_set_header 第三参是纯 value（历史教训：传整串双头名永 403）。 */
+static esp_http_client_handle_t s_cli;
+static char s_rx[RK_STATS_JSON_MAX_BYTES + 1];
+static size_t s_rx_len;
+
+static esp_err_t on_http_evt(esp_http_client_event_t *evt)
+{
+    if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data != NULL && evt->data_len > 0) {
+        size_t cap = sizeof(s_rx) - 1 - s_rx_len;
+        size_t n = ((size_t)evt->data_len < cap) ? (size_t)evt->data_len : cap;
+        memcpy(s_rx + s_rx_len, evt->data, n);
+        s_rx_len += n;
+    }
+    return ESP_OK;
+}
+
 static esp_err_t poll_once(rk_stats_t *out, bool *have)
 {
     char url[128];
-    esp_err_t err;
-    int status = 0;
-    static char body[RK_STATS_JSON_MAX_BYTES + 1];
+    *have = false;
 
     /* 信标参数随轮询上报（b=电池mV c=节拍 r=RSSI）；RSSI 顺路取一次 */
     wifi_ap_record_t ap;
@@ -172,39 +188,47 @@ static esp_err_t poll_once(rk_stats_t *out, bool *have)
     snprintf(url, sizeof(url), "http://%s:%d/stats?b=%ld&c=%d&r=%d",
              RK_STATS_HOST, RK_STATS_PORT, (long)s_beacon_mv, s_beacon_calm,
              (int)s_beacon_rssi);
-    esp_http_client_config_t cfg = {
-        .url = url,
-        .timeout_ms = 2000, /* 2s 节拍内的阻塞预算 */
-    };
-    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
-    if (cli == NULL) return ESP_FAIL;
 
-    esp_http_client_set_header(cli, "X-Token", RK_STATS_TOKEN); /* token 不落日志 */
-    *have = false;
-    err = esp_http_client_open(cli, 0);
-    if (err == ESP_OK) {
-        esp_http_client_fetch_headers(cli);
-        int len = esp_http_client_read_response(cli, body, (int)sizeof(body) - 1);
-        if (len < 0) len = 0;
-        body[len] = '\0';
-        status = esp_http_client_get_status_code(cli);
-        if (status == 200 && len > 0) {
-            if (rk_stats_parse((const uint8_t *)body, (size_t)len, out) == RK_PARSE_OK) {
-                *have = true;
-            } else {
-                ESP_LOGW(TAG, "stats parse failed (%d bytes)", len);
-                err = ESP_ERR_INVALID_RESPONSE;
-            }
-        } else if (status == 403) {
-            ESP_LOGW(TAG, "403: token mismatch (host %s)", RK_STATS_HOST);
-            err = ESP_ERR_INVALID_STATE;
-        } else {
-            ESP_LOGW(TAG, "HTTP %d (%d bytes) from %s", status, len, RK_STATS_HOST);
-            err = ESP_FAIL;
+    if (s_cli == NULL) {
+        esp_http_client_config_t cfg = {
+            .url = url,
+            .timeout_ms = 2000,       /* 2s 节拍内的阻塞预算 */
+            .keep_alive_enable = true, /* TCP 保活探针：及早发现被掐死的连接 */
+            .event_handler = on_http_evt,
+        };
+        s_cli = esp_http_client_init(&cfg);
+        if (s_cli == NULL) {
+            return ESP_FAIL;
         }
+        esp_http_client_set_header(s_cli, "X-Token", RK_STATS_TOKEN); /* token 不落日志 */
     }
-    esp_http_client_cleanup(cli);
-    return err;
+
+    s_rx_len = 0;
+    esp_http_client_set_url(s_cli, url); /* 仅 query 变：同主机连接复用 */
+    esp_err_t err = esp_http_client_perform(s_cli);
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(s_cli); /* 连接已废：丢弃，下轮重建 */
+        s_cli = NULL;
+        return err;
+    }
+
+    int status = esp_http_client_get_status_code(s_cli);
+    int len = (int)s_rx_len;
+    s_rx[s_rx_len] = '\0';
+    if (status == 200 && len > 0) {
+        if (rk_stats_parse((const uint8_t *)s_rx, (size_t)len, out) == RK_PARSE_OK) {
+            *have = true;
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "stats parse failed (%d bytes)", len);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+    if (status == 403) {
+        ESP_LOGW(TAG, "403: token mismatch (host %s)", RK_STATS_HOST);
+        return ESP_ERR_INVALID_STATE;
+    }
+    ESP_LOGW(TAG, "HTTP %d (%d bytes) from %s", status, len, RK_STATS_HOST);
+    return ESP_FAIL;
 }
 
 void rk_poll_step(rk_poll_state_t *st)
