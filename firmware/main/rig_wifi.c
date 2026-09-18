@@ -22,6 +22,13 @@
 
 #define TAG "rig_wifi"
 
+/*
+ * 信标监听间隔（仅 MAX_MODEM 档生效；单位=AP 信标周期，家用路由典型 100ms）。
+ * 本设备全部业务自轮询，无被动下行，拉长监听零功能代价（2026-09-18 电流表
+ * 实测 30mA 地板，信标监听嫌疑 ~10-15mA）。MIN_MODEM 档忽略此值，BUSY 响应不受影响。
+ */
+#define RK_WIFI_LISTEN_INTERVAL 10
+
 /* 目标局域网段（须与 rig_net_config.h 的 RK_STATS_HOST 同段） */
 #define RK_LAN_A 192
 #define RK_LAN_B 168
@@ -125,9 +132,11 @@ esp_err_t rig_wifi_start(const char *ssid, const char *pass)
     strncpy((char *)wc.sta.ssid, ssid, sizeof wc.sta.ssid - 1);
     strncpy((char *)wc.sta.password, pass ? pass : "", sizeof wc.sta.password - 1);
     wc.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK; /* 开放/WEP 拒绝 */
+    wc.sta.listen_interval = RK_WIFI_LISTEN_INTERVAL; /* CALM/MAX_MODEM 期约 1s 醒一次 */
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
-    ESP_LOGI(TAG, "connecting ssid=\"%s\"（密码不落日志）", ssid);
+    ESP_LOGI(TAG, "connecting ssid=\"%s\" li=%u（密码不落日志）", ssid,
+             (unsigned)wc.sta.listen_interval);
     ESP_ERROR_CHECK(esp_wifi_start());
 
     /* 同名 AP 扫描（结果按 RSSI 降序）：锁定最强 BSSID，防漫游到异子网路由器 */

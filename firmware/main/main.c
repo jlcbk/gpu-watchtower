@@ -387,7 +387,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5s", (int)esp_reset_reason());
+    rig_ev("boot", "rst=%d fw=P5L", (int)esp_reset_reason()); /* P5L=P5s+listen_interval；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
