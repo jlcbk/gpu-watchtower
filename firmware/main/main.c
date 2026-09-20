@@ -39,6 +39,7 @@
 #include "rk_stats.h"
 #include "rk_ui.h"
 #include "rig_batt.h"
+#include "rig_audio.h"
 #include "rig_env.h"
 #include "rig_ev.h"
 #include "rig_hist.h"
@@ -449,7 +450,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5X", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5Y", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
@@ -473,13 +474,14 @@ void app_main(void)
 
     g_ev = xSemaphoreCreateBinary();
 
-    /* 电池 ADC + 温湿度（失败不挡启动：对应位显 "--"/空） */
+    /* 电池 ADC + 温湿度 + 音频子系统休眠（失败不挡启动：对应位显 "--"/空） */
     if (rig_batt_init() != ESP_OK) {
         ESP_LOGW(TAG, "battery adc unavailable");
     }
     if (rig_env_init() != ESP_OK) {
         ESP_LOGW(TAG, "env sensor unavailable");
     }
+    rig_audio_sleep(); /* P5Y 外围省电：codec/ADC/功放全关（失败仅事件记录） */
 
 #if CONFIG_PM_ENABLE
     {

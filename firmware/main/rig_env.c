@@ -24,6 +24,12 @@
 #define ENV_CMD_MEAS   0x7866 /* MEAS_T_RH_POLLING（无时钟拉伸） */
 
 static i2c_master_dev_handle_t s_dev;
+static i2c_master_bus_handle_t s_bus; /* 音频子系统（rig_audio）共用本总线 */
+
+i2c_master_bus_handle_t rig_env_i2c_bus(void)
+{
+    return s_bus;
+}
 
 static esp_err_t send_cmd(uint16_t cmd)
 {
@@ -58,6 +64,7 @@ esp_err_t rig_env_init(void)
         ESP_LOGE(TAG, "i2c bus failed: %s", esp_err_to_name(err));
         return err;
     }
+    s_bus = bus;
     i2c_device_config_t dc = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = ENV_I2C_ADDR,

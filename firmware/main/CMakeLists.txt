@@ -8,6 +8,7 @@ idf_component_register(
          "rig_poll.c"
          "rig_wifi.c"
          "rig_batt.c"
+         "rig_audio.c"
          "rig_env.c"
          "rig_hist.c"
          "rig_ev.c"
