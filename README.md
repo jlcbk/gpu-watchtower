@@ -75,6 +75,9 @@ idf.py -C firmware -B firmware/build -p <串口> flash
 
 3. 模拟器（无需硬件预览 UI）：`cmake -S simulator -B build/simulator && cmake --build build/simulator`
 
+> **真机刷写 / 刷回本固件**：端口人格、冷启动入口、刷后验证红线等实战经验
+> 全部沉淀在 [docs/FLASHING.md](docs/FLASHING.md)（写给 Agent 的操作手册，可直投给任意助手执行）。
+
 ## 项目结构
 
 ```
