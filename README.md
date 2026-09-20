@@ -1,6 +1,6 @@
 # gpu-watchtower · 显卡瞭望塔
 
-一块 4.2 寸反射式墨水屏桌搭，**实时盯着你的 GPU**：温度大字一瞥、利用率/显存/功耗/风扇全量、60 分钟温度曲线、超温整屏警报。为长夜渲片无人值守而生。
+跑在 [Waveshare ESP32-S3-RLCD-4.2](https://www.waveshare.com/wiki/ESP32-S3-RLCD-4.2)（4.2" 反射屏 + 18650 电池）上的 **GPU 哨兵桌搭**：温度大字一瞥、利用率/显存/功耗/风扇全量、60 分钟温度曲线、超温整屏警报。为长夜渲片无人值守而生——闲时实测 11mA，一节 18650 待机约 5 天。
 
 ![showcase](docs/images/showcase.png)
 
@@ -47,7 +47,14 @@ Mac 哨兵       tools/cadence_watch.py 可选串口观察员（崩溃栈现场�
 
 ## 硬件与架构
 
-- 屏：[Waveshare ESP32-S3-RLCD-4.2](https://www.waveshare.com/wiki/ESP32-S3-RLCD-4.2)（ESP32-S3 N16R8 + 4.2" 400×300 反射式 LCD，ST7305，无背光静态近零耗电）
+**为什么是 Waveshare ESP32-S3-RLCD-4.2 这块板**：
+
+- **反射式 LCD（ST7305）无背光**：静态画面近零耗电——「常亮显示 + 电池供电」这对矛盾只有这类屏幕解得开；
+- **18650 电池座 + 充放电管理**：真无线桌搭，配合本项目省电栈待机约 5 天；
+- **板载 SHTC3 温湿度**：顺手白拿的环境数据（底栏常显）；
+- **音频全家桶（ES8311/ES7210/功放/双麦）**：监控屏用不到，开机软件关断回收 ~10mA——外围休眠策略的开箱素材，也是将来「警报发声」的现成硬件。
+
+- 主控：ESP32-S3 N16R8（16MB flash / 8MB PSRAM）
 - 固件：ESP-IDF v5.5.5 + LVGL 9.3.0，Mac/设备双端同源 UI + 像素级 golden 回归
 - 被监控侧：任意 Linux 主机跑一个 ~200 行的 Python 导出器（`nvidia-smi` + `psutil`，systemd 常驻）
 
