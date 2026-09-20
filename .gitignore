@@ -16,3 +16,6 @@ __pycache__/
 # 体积大的可重下载物（SDL 源 tarball）
 third_party/dl/
 vendor/
+
+# 本地交接文档（含环境细节，绝不入库）
+HANDOFF-LOCAL.md
