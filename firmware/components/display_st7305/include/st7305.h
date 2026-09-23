@@ -81,6 +81,13 @@ esp_err_t st7305_init(const st7305_config_t *cfg);
  */
 esp_err_t st7305_flush(const rk_frame_t *frame);
 
+/*
+ * 面板自愈（P5Z）：重发寄存器初始化序列 + 重推当前帧（不含硬件复位，
+ * 例行调用无可见闪屏）。用于从"面板拒绝写入"类失联（噪声注入睡眠命令）
+ * 中恢复；由上层周期触发（main 每 10 分钟）。未 init 返回 INVALID_STATE。
+ */
+esp_err_t st7305_heal(void);
+
 /* 释放总线与缓冲（幂等）。 */
 void st7305_deinit(void);
 

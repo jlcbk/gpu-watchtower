@@ -133,6 +133,111 @@ static esp_err_t push_native_frame(void)
     return ESP_OK;
 }
 
+static esp_err_t panel_init_cmds(void)
+{
+    /* ---- init 序列：逐条对照官方 RLCD_Init()（P5Z：init/heal 共用，不含硬件复位） ---- */
+    esp_err_t err = ESP_OK;
+    static const uint8_t d6[]  = {0x17, 0x02};
+    static const uint8_t d1[]  = {0x01};
+    static const uint8_t c0[]  = {0x11, 0x04};
+    static const uint8_t c1[]  = {0x69, 0x69, 0x69, 0x69};
+    static const uint8_t c2[]  = {0x19, 0x19, 0x19, 0x19};
+    static const uint8_t c4[]  = {0x4B, 0x4B, 0x4B, 0x4B};
+    static const uint8_t c5[]  = {0x19, 0x19, 0x19, 0x19};
+    static const uint8_t d8[]  = {0x80, 0xE9};
+    static const uint8_t b2[]  = {0x02};
+    static const uint8_t b3[]  = {0xE5, 0xF6, 0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45};
+    static const uint8_t b4[]  = {0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45};
+    static const uint8_t r62[] = {0x32, 0x03, 0x1F};
+    static const uint8_t b7[]  = {0x13};
+    static const uint8_t b0[]  = {0x64};
+    static const uint8_t r36[] = {0x48};
+    static const uint8_t r3a[] = {0x11};
+    static const uint8_t b9[]  = {0x20};
+    static const uint8_t b8[]  = {0x29};
+    static const uint8_t r35[] = {0x00};
+    static const uint8_t d0[]  = {0xFF};
+
+    struct { uint8_t cmd; const uint8_t *data; size_t len; } seq[] = {
+        {0xD6, d6, sizeof d6},   /* NVM Load Control */
+        {0xD1, d1, sizeof d1},   /* Booster Enable */
+        {0xC0, c0, sizeof c0},   /* Gate Voltage Control */
+        {0xC1, c1, sizeof c1},   /* VSHP Setting */
+        {0xC2, c2, sizeof c2},
+        {0xC4, c4, sizeof c4},
+        {0xC5, c5, sizeof c5},
+        {0xD8, d8, sizeof d8},
+        {0xB2, b2, sizeof b2},
+        {0xB3, b3, sizeof b3},
+        {0xB4, b4, sizeof b4},
+        {0x62, r62, sizeof r62},
+        {0xB7, b7, sizeof b7},
+        {0xB0, b0, sizeof b0},
+    };
+    for (size_t i = 0; i < sizeof seq / sizeof seq[0]; i++) {
+        err = cmd_data(seq[i].cmd, seq[i].data, seq[i].len);
+        if (err != ESP_OK) return err;
+    }
+
+    err = cmd(0x11); /* Sleep Out；官方后延 200ms */
+    if (err != ESP_OK) return err;
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    static const uint8_t c9[] = {0x00};
+    err = cmd_data(0xC9, c9, sizeof c9);
+    if (err != ESP_OK) return err;
+    err = cmd_data(0x36, r36, sizeof r36); /* MADCTL */
+    if (err != ESP_OK) return err;
+    err = cmd_data(0x3A, r3a, sizeof r3a); /* 像素格式（mono 2-dot） */
+    if (err != ESP_OK) return err;
+    err = cmd_data(0xB9, b9, sizeof b9);
+    if (err != ESP_OK) return err;
+    err = cmd_data(0xB8, b8, sizeof b8);
+    if (err != ESP_OK) return err;
+    err = cmd(0x21); /* Display Inversion On */
+    if (err != ESP_OK) return err;
+    err = cmd_data(0x35, r35, sizeof r35);
+    if (err != ESP_OK) return err;
+    err = cmd_data(0xD0, d0, sizeof d0);
+    if (err != ESP_OK) return err;
+    err = cmd(0x38);
+    if (err != ESP_OK) return err;
+    err = cmd(0x29); /* Display On */
+    if (err != ESP_OK) return err;
+    return ESP_OK;
+}
+
+/* P5Z：面板自愈心跳——寄存器序列重发 + 当前帧重推（不做硬件复位，避免例行闪屏）。
+ * 动机：2026-09-23 白屏事故（固件健康/SPI 有输出/面板不应答，疑噪声注入睡眠类
+ * 命令使面板拒绝写入）。每 10 分钟由 main 的 panel_heal 触发，任何此类失联最长
+ * 10 分钟自愈。若未来发现"命令通道本身楔死"的形态，再升级为含 hw_reset 的强档。 */
+esp_err_t st7305_heal(void)
+{
+    if (s_io == NULL || s_native == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+#if CONFIG_PM_ENABLE
+    if (s_pm_apb != NULL) {
+        esp_pm_lock_acquire(s_pm_apb);
+    }
+#endif
+    esp_err_t err = panel_init_cmds();
+    if (err == ESP_OK) {
+        /* s_native 与 s_prev 静止时恒相等（flush 后同步），直接重推即恢复画面 */
+        err = push_native_frame();
+        vTaskDelay(pdMS_TO_TICKS(ST7305_SETTLE_MS));
+    }
+#if CONFIG_PM_ENABLE
+    if (s_pm_apb != NULL) {
+        esp_pm_lock_release(s_pm_apb);
+    }
+#endif
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "heal failed: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
 esp_err_t st7305_init(const st7305_config_t *cfg)
 {
     if (cfg == NULL) {
@@ -205,73 +310,7 @@ esp_err_t st7305_init(const st7305_config_t *cfg)
 
     hw_reset(cfg->rst_gpio);
 
-    /* ---- init 序列：逐条对照官方 RLCD_Init() ---- */
-    static const uint8_t d6[]  = {0x17, 0x02};
-    static const uint8_t d1[]  = {0x01};
-    static const uint8_t c0[]  = {0x11, 0x04};
-    static const uint8_t c1[]  = {0x69, 0x69, 0x69, 0x69};
-    static const uint8_t c2[]  = {0x19, 0x19, 0x19, 0x19};
-    static const uint8_t c4[]  = {0x4B, 0x4B, 0x4B, 0x4B};
-    static const uint8_t c5[]  = {0x19, 0x19, 0x19, 0x19};
-    static const uint8_t d8[]  = {0x80, 0xE9};
-    static const uint8_t b2[]  = {0x02};
-    static const uint8_t b3[]  = {0xE5, 0xF6, 0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45};
-    static const uint8_t b4[]  = {0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45};
-    static const uint8_t r62[] = {0x32, 0x03, 0x1F};
-    static const uint8_t b7[]  = {0x13};
-    static const uint8_t b0[]  = {0x64};
-    static const uint8_t r36[] = {0x48};
-    static const uint8_t r3a[] = {0x11};
-    static const uint8_t b9[]  = {0x20};
-    static const uint8_t b8[]  = {0x29};
-    static const uint8_t r35[] = {0x00};
-    static const uint8_t d0[]  = {0xFF};
-
-    struct { uint8_t cmd; const uint8_t *data; size_t len; } seq[] = {
-        {0xD6, d6, sizeof d6},   /* NVM Load Control */
-        {0xD1, d1, sizeof d1},   /* Booster Enable */
-        {0xC0, c0, sizeof c0},   /* Gate Voltage Control */
-        {0xC1, c1, sizeof c1},   /* VSHP Setting */
-        {0xC2, c2, sizeof c2},
-        {0xC4, c4, sizeof c4},
-        {0xC5, c5, sizeof c5},
-        {0xD8, d8, sizeof d8},
-        {0xB2, b2, sizeof b2},
-        {0xB3, b3, sizeof b3},
-        {0xB4, b4, sizeof b4},
-        {0x62, r62, sizeof r62},
-        {0xB7, b7, sizeof b7},
-        {0xB0, b0, sizeof b0},
-    };
-    for (size_t i = 0; i < sizeof seq / sizeof seq[0]; i++) {
-        err = cmd_data(seq[i].cmd, seq[i].data, seq[i].len);
-        if (err != ESP_OK) goto fail_io;
-    }
-
-    err = cmd(0x11); /* Sleep Out；官方后延 200ms */
-    if (err != ESP_OK) goto fail_io;
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    static const uint8_t c9[] = {0x00};
-    err = cmd_data(0xC9, c9, sizeof c9);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0x36, r36, sizeof r36); /* MADCTL */
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0x3A, r3a, sizeof r3a); /* 像素格式（mono 2-dot） */
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0xB9, b9, sizeof b9);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0xB8, b8, sizeof b8);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd(0x21); /* Display Inversion On */
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0x35, r35, sizeof r35);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd_data(0xD0, d0, sizeof d0);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd(0x38);
-    if (err != ESP_OK) goto fail_io;
-    err = cmd(0x29); /* Display On */
+    err = panel_init_cmds();
     if (err != ESP_OK) goto fail_io;
 
     /* 初屏全白（RAM 位 1=白，与官方 ColorClear(ColorWhite) 等效） */

@@ -134,6 +134,26 @@ static void env_poll(void)
     }
 }
 
+/* ---- 面板自愈心跳（P5Z，2026-09-23 白屏事故）----
+ * 事故形态：固件健康/SPI 有输出/面板不应答（疑噪声注入睡眠类命令），
+ * 同帧跳推使画面静态后固件永不重写——白屏无限期滞留。每 10 分钟无条件
+ * 重发面板初始化序列+重推当前帧（驱动层不含硬件复位，无例行闪屏），
+ * 任何此类失联最长 10 分钟自愈。代价 ~250ms 低频工作，省电栈无感。 */
+#define PANEL_HEAL_MS 600000u
+static int64_t g_heal_last_ms;
+
+static void panel_heal(void)
+{
+    int64_t now = (int64_t)(esp_timer_get_time() / 1000LL);
+    if (g_heal_last_ms != 0 && now - g_heal_last_ms < PANEL_HEAL_MS) {
+        return;
+    }
+    g_heal_last_ms = (now != 0) ? now : 1;
+    if (st7305_heal() == ESP_OK) {
+        rig_ev("panel", "heal");
+    }
+}
+
 /* ---- CPU 运行占比探针（2026-09-18 电流表 27mA 地板悬案） ----
  * 原理：CPU 周期计数器（ccount）在轻睡时停走，esp_timer 走墙钟。
  *   run% = Δccount / (240MHz × Δ墙钟)
@@ -336,6 +356,7 @@ static void power_service(void)
     batt_poll();
     env_poll();
     cpu_probe();
+    panel_heal();
 
 #if CONFIG_PM_ENABLE
     /* 轻睡门控：电池不在位持锁保 USB 控制台；在位放行真睡 */
@@ -450,7 +471,7 @@ void app_main(void)
              0
 #endif
     );
-    rig_ev("boot", "rst=%d fw=P5Y", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
+    rig_ev("boot", "rst=%d fw=P5Z", (int)esp_reset_reason()); /* P5V=P5U+睡眠期引脚态+分脚ISR计数；改固件必改此串 */
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP && g_rtc_lowbatt) {
         rig_ev("wake_lowbatt", "rtc=1");
         g_rtc_lowbatt = 0;
